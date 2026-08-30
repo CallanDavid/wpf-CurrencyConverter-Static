@@ -7,7 +7,7 @@ using System.Diagnostics.Eventing.Reader;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;   //this library is used for regex
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -18,6 +18,8 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using System.Net.Http;
+using Newtonsoft.Json;
 
 namespace CurrencyConverter_Static
 {
@@ -25,27 +27,84 @@ namespace CurrencyConverter_Static
     /// Interaction logic for MainWindow.xaml
     /// </summary>
     public partial class MainWindow : Window
-    {   
-        SqlConnection con = new SqlConnection();    //create Object for SqlConnection
-        SqlCommand cmd = new SqlCommand();          //create Object for SqlCommand
-        SqlDataAdapter da = new SqlDataAdapter();   //create Object for SqlDataAdapter
+    {
 
-        private int CurrencyId = 0;     //Declare CurrencyId with int DataType and assign value 0
-        private double FromAmount = 0;  //Declare FromAmount with double DataType and assign value 0
-        private double ToAmount = 0;    //Declare ToAmount with double DataType and assign value 0
+        Root val = new Root();
 
+        public class Root
+        {
+            public Rate rates { get; set; } //get all Record in rates and Set in Rate Class as Currency Name Wise
+            public long timestamp;
+            public string license;
+        }
+        public class Rate
+        {
+            public double INR { get; set; }
+            public double JPY { get; set; }
+            public double USD { get; set; }
+            public double NZD { get; set; }
+            public double EUR { get; set; }
+            public double CAD { get; set; }
+            public double ISK { get; set; }
+            public double ZAR { get; set; }
+            public double DKK { get; set; }
+            public double CZK { get; set; }
 
+        }
         public MainWindow()
         {
             InitializeComponent();
             ClearConverter();
-            BindCurrency();
-            GetData();  
+            GetValue();
         }
+
+        public async void GetValue()
+        {
+            var appId = Environment.GetEnvironmentVariable("OPENEXCHANGERATES_APP_ID");
+            val = await GetData<Root>($"https://openexchangerates.org/api/latest.json?app_id={appId}");
+            BindCurrency();
+        }
+
         /*
         CRUD
         SqlCommands: create, read, update, delete 
          */
+
+        public static async Task<Root> GetData<T>(string url)
+        {
+            var myRoot = new Root();
+            try
+            {
+                using (var client = new HttpClient())   //HttpClient class provides a base case for sending and receiving the HTTP requests and responses from a URL.
+                {
+                    client.Timeout = TimeSpan.FromMinutes(1);   //how long before request times out.
+                    HttpResponseMessage response = await client.GetAsync(url);   //HttpResponseMessage is a way of returning a message/data from your action.
+                    if (response.StatusCode == System.Net.HttpStatusCode.OK)
+                    {
+                        var ResponseString = await response.Content.ReadAsStringAsync(); //Serialize the HTTP content to a string as an asynchronous operation.
+                        var ResponseObject = JsonConvert.DeserializeObject<Root>(ResponseString); //JsonConvert.DeserializeObject to deserialize Json to a C# object.
+
+                        //MessageBox.Show("Rates: " + ResponseString, "Information", MessageBoxButton.OK, MessageBoxImage.Information);
+
+                        return ResponseObject; //Return API response
+                    }
+                    return myRoot;
+                }
+            }
+            catch
+            {
+                return myRoot;
+            }
+        }
+
+        //create objects for SqlConnection, SqlCommand, and SqlDataAdapter
+        SqlConnection con = new SqlConnection();
+        SqlCommand cmd = new SqlCommand();
+        SqlDataAdapter da = new SqlDataAdapter();
+
+        private int CurrencyId = 0;     //Declare CurrencyId with int DataType and assign value 0
+        private double FromAmount = 0;  //Declare FromAmount with double DataType and assign value 0
+        private double ToAmount = 0;    //Declare ToAmount with double DataType and assign value 0
 
         public void mycon()
         {
@@ -56,6 +115,7 @@ namespace CurrencyConverter_Static
 
         private void BindCurrency()
         {
+            /*
             mycon();
             //Create Object for DataTable
             DataTable dt = new DataTable();
@@ -83,7 +143,6 @@ namespace CurrencyConverter_Static
                 //Assign the datatable data to ToCurrency combobox using the ItemSource property.
                 cmbToCurrency.ItemsSource = dt.DefaultView;
             }
-            con.Close();
 
             cmbFromCurrency.DisplayMemberPath = "CurrencyName";
             cmbFromCurrency.SelectedValuePath = "Id";
@@ -91,6 +150,37 @@ namespace CurrencyConverter_Static
 
             cmbToCurrency.DisplayMemberPath = "CurrencyName";
             cmbToCurrency.SelectedValuePath = "Id";
+            cmbToCurrency.SelectedIndex = 0;
+
+            con.Close();
+            */
+            mycon();
+            DataTable dt = new DataTable();
+
+            dt.Columns.Add("Text");
+
+            dt.Columns.Add("Rate");
+
+            dt.Rows.Add("--SELECT--", 0);
+            dt.Rows.Add("INR", val.rates.INR);
+            dt.Rows.Add("USD", val.rates.USD);
+            dt.Rows.Add("NZD", val.rates.NZD);
+            dt.Rows.Add("JPY", val.rates.JPY);
+            dt.Rows.Add("EUR", val.rates.EUR);
+            dt.Rows.Add("CAD", val.rates.CAD);
+            dt.Rows.Add("ISK", val.rates.ISK);
+            dt.Rows.Add("ZAR", val.rates.ZAR);
+            dt.Rows.Add("DKK", val.rates.DKK);
+            dt.Rows.Add("CZK", val.rates.CZK);
+
+            cmbFromCurrency.ItemsSource = dt.DefaultView;
+            cmbFromCurrency.DisplayMemberPath = "Text";
+            cmbFromCurrency.SelectedValuePath = "Rate";
+            cmbFromCurrency.SelectedIndex = 0;
+
+            cmbToCurrency.ItemsSource = dt.DefaultView;
+            cmbToCurrency.DisplayMemberPath = "Text";
+            cmbToCurrency.SelectedValuePath = "Rate";
             cmbToCurrency.SelectedIndex = 0;
         }
 
@@ -106,12 +196,19 @@ namespace CurrencyConverter_Static
                 return;
             }
             //Else if currency From is not selected or default text selected.
-            else if (cmbFromCurrency.SelectedValue == null || cmbFromCurrency.SelectedIndex == 0)
+            else if (cmbFromCurrency.SelectedValue == null || cmbFromCurrency.SelectedIndex == 0 )
             {
                 // If 'From Currency' is null or empty, show message box.
                 MessageBox.Show("Please Select a Currency From", "No...", MessageBoxButton.OK, MessageBoxImage.Question);
                 // After clicking 'OK', set focus to the from currency combobox.
                 cmbFromCurrency.Focus();
+
+                // checking if its reading either of the 2 selection boxes...
+                if (cmbToCurrency.SelectedValue == null || cmbToCurrency.SelectedIndex == 0 )
+                {
+                    MessageBox.Show("Your Currency To is ALSO not selected", "Andddd...", MessageBoxButton.OK, MessageBoxImage.Question);
+                }
+
                 return;
             }
             //Else if currency To is not selected or default text selected.
@@ -119,6 +216,13 @@ namespace CurrencyConverter_Static
             {
                 MessageBox.Show("Please Select a Currency To", "No...", MessageBoxButton.OK, MessageBoxImage.Question);
                 cmbToCurrency.Focus();
+
+
+                if (cmbFromCurrency.SelectedValue == null || cmbFromCurrency.SelectedIndex == 0)
+                {
+                    MessageBox.Show("Your Currency From is ALSO not selected", "Andddd...", MessageBoxButton.OK, MessageBoxImage.Question);
+                }
+
                 return;
             }
 
@@ -137,7 +241,7 @@ namespace CurrencyConverter_Static
             }
             else
             {
-                ConvertedValue = (double.Parse( cmbToCurrency.SelectedValue.ToString()) * double.Parse(txtCurrency.Text)) / double.Parse(cmbFromCurrency.SelectedValue.ToString());
+                ConvertedValue = (double.Parse(cmbToCurrency.SelectedValue.ToString()) * double.Parse(txtCurrency.Text)) / double.Parse(cmbFromCurrency.SelectedValue.ToString());
                 lblCurrency.Content = cmbToCurrency.Text + " " + ConvertedValue.ToString("N2");
             }
         }
@@ -217,7 +321,7 @@ namespace CurrencyConverter_Static
                     }
                 }
             }
-            catch (Exception ex) 
+            catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -237,7 +341,7 @@ namespace CurrencyConverter_Static
                 BindCurrency();
                 txtAmount.Focus();
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
@@ -310,9 +414,9 @@ namespace CurrencyConverter_Static
                     }
                 }
             }
-            catch(Exception ex)
+            catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);    
+                MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
